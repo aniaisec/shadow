@@ -31,6 +31,7 @@ export function Thinking({ question }: { question: string }) {
 export function AnswerView({ question, answer, followups = [], onAsk }:
   { question: string; answer: Answer; followups?: string[]; onAsk?: (q: string) => void }) {
   const cites = answer.citations ?? [];
+  const refused = Boolean(answer.restricted_note) && cites.length === 0;
   const [sel, setSel] = useState(0);
   const selectCite = (n: number) => setSel(Math.max(0, Math.min(cites.length - 1, n - 1)));
 
@@ -40,7 +41,16 @@ export function AnswerView({ question, answer, followups = [], onAsk }:
         <div className="q-bubble">{question}</div>
         <div className="answer-block">
           <div className="answer-by"><ShadowMark size={24} /> Shadow</div>
-          <div className="answer-md">{renderMarkdown(answer.answer_markdown, selectCite)}</div>
+          {!refused && <div className="answer-md">{renderMarkdown(answer.answer_markdown, selectCite)}</div>}
+          {refused && (
+            <div className="restricted" role="status">
+              <Icon d={ICONS.lock} sm />
+              <div>
+                <div className="rtitle">I can't use that source for you</div>
+                <div className="rbody">{answer.restricted_note}</div>
+              </div>
+            </div>
+          )}
 
           {answer.decision_status && (
             <div className="decision-row">
@@ -78,7 +88,7 @@ export function AnswerView({ question, answer, followups = [], onAsk }:
             </div>
           )}
 
-          {answer.restricted_note && answer.citations.length > 0 && (
+          {answer.restricted_note && !refused && (
             <div className="restricted">
               <Icon d={ICONS.lock} sm />
               <div>
@@ -88,7 +98,7 @@ export function AnswerView({ question, answer, followups = [], onAsk }:
             </div>
           )}
 
-          {followups.length > 0 && onAsk && (
+          {!refused && followups.length > 0 && onAsk && (
             <div className="followups">
               <span className="followups-label">Ask a follow-up</span>
               <div className="followup-chips">

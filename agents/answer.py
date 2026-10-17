@@ -370,6 +370,9 @@ def answer(user_id: str, question: str) -> dict[str, Any]:
     user_id = str(user_id)
     # structured fields + guaranteed-correct result (also the fallback)
     base = _answer_pipeline(user_id, question)
+    # A full refusal is final: never re-enter retrieval or replace it with LLM prose.
+    if base.get("restricted_note") and not base["citations"]:
+        return base
     # The Strands tool-calling loop is real but slower (~60-90s); gate it behind
     # SHADOW_AGENTIC so the live demo stays snappy while "fully agentic" is a
     # flip of one env var. Pipeline prose already routes through Strands too.
@@ -399,14 +402,15 @@ def _answer_pipeline(user_id: str, question: str) -> dict[str, Any]:
     components = _components_from(question)
 
     # privacy signal: a Restricted source on the topic the asker cannot read.
-    # This does NOT short-circuit — we first gather what the asker CAN read, then
-    # decide between a full refusal (nothing readable) and a partial answer
-    # (some readable sources) with a withheld-source note.
+    # Restricted-only topics terminate before unrelated retrieval or reasoning.
+    # Shared topics still gather readable sources for a possible partial answer.
     restricted = _restricted_hit(question, user_id)
-    cards = _people_cards()
-    org = _org_chart()
 
     def _restricted_who(attendees: str) -> dict:
+        try:
+            cards = _people_cards()
+        except Exception:
+            cards = []
         for c in cards:
             if c.get("email", "") in attendees and c.get("active") == "yes":
                 return {"name": c.get("name"), "role": c.get("role"),
@@ -415,6 +419,24 @@ def _answer_pipeline(user_id: str, question: str) -> dict[str, Any]:
         return {"name": "Dana Kim", "role": "Engineering Manager",
                 "reason": "Hosted that review and can brief you.",
                 "moved_note": None}
+
+    def refuse() -> dict:
+        who = _restricted_who(restricted.get("attendees", ""))
+        note = ("I can't answer that from team memory — the only source on it is in "
+                "a Restricted folder your Box access doesn't include. "
+                f"{who['name']} was in that review and can brief you directly.")
+        log_activity("Answer", f"Refused restricted-only topic for user {user_id}",
+                     "", "privacy: full refusal")
+        return {
+            "answer_markdown": note,
+            "citations": [],
+            "decision_status": None,
+            "who_to_ask": who,
+            "restricted_note": note,
+        }
+
+    if restricted and restricted.get("only"):
+        return refuse()
 
     items = _matched_items(issue_ids, components, user_id)
     # Rank by (relevance, source-type). Relevance rewards an item whose
@@ -442,25 +464,12 @@ def _answer_pipeline(user_id: str, question: str) -> dict[str, Any]:
     items = [r for _, _, r in ranked]
     cits = _build_citations(items, user_id)
 
-    # FAILURE scenario: the restricted topic is "restricted-only" (vendor /
-    # pricing / contract) — there is no genuine public source on it, so even if
-    # a broad component scan surfaced tangential files, refuse cleanly. Also
-    # refuse when nothing readable matched at all.
-    restricted_only = bool(restricted and restricted.get("only"))
-    if restricted and (restricted_only or not cits):
-        who = _restricted_who(restricted.get("attendees", ""))
-        note = ("I can't answer that from team memory — the only source on it is in "
-                "a Restricted folder your Box access doesn't include. "
-                f"{who['name']} was in that review and can brief you directly.")
-        log_activity("Answer", f"Refused restricted-only topic for user {user_id}",
-                     "", "privacy: full refusal")
-        return {
-            "answer_markdown": note,
-            "citations": [],
-            "decision_status": None,
-            "who_to_ask": who,
-            "restricted_note": note,
-        }
+    # A shared restricted topic also becomes a full refusal when nothing readable matches.
+    if restricted and not cits:
+        return refuse()
+
+    cards = _people_cards()
+    org = _org_chart()
 
     if not components:
         # infer components: the TOP citation (the issue / most relevant source)

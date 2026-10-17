@@ -7,11 +7,12 @@ async function get<T>(path: string): Promise<T> {
   if (!r.ok) throw new Error(`${path} ${r.status}`);
   return r.json() as Promise<T>;
 }
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const r = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
+    signal,
   });
   if (!r.ok) throw new Error(`${path} ${r.status}`);
   return r.json() as Promise<T>;
@@ -22,7 +23,7 @@ export const api = {
   setActingAs: (user: string) => post<ActingAs>("/api/acting-as", { user }),
   sources: () => get<Sources>("/api/sources"),
   ask: (user_id: string, question: string) =>
-    post<Answer>("/api/ask", { user_id, question }),
+    post<Answer>("/api/ask", { user_id, question }, AbortSignal.timeout(120_000)),
   ingest: () => post<{ ok: boolean; steps?: unknown; error?: string }>("/api/ingest", {}),
   confirmTask: () =>
     post<{ ok: boolean; closed?: number; error?: string }>("/api/simulate/confirm-task", {}),

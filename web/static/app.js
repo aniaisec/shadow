@@ -7,8 +7,8 @@ const api = async (path, opts) => {
   if (!r.ok) throw new Error(path + " " + r.status);
   return r.json();
 };
-const post = (path, body) =>
-  api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+const post = (path, body, signal) =>
+  api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}), signal });
 
 const SRC_ICON = {
   meeting: '<rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 20h8"/>',
@@ -162,7 +162,7 @@ async function ask(question) {
   showAnswerArea();
   renderThinking(question);
   try {
-    const ans = await post("/api/ask", { user_id: state.userId, question });
+    const ans = await post("/api/ask", { user_id: state.userId, question }, AbortSignal.timeout(120_000));
     state.questions[question].answer = ans;
     state.lastAnswer = ans;
     renderAnswer(question, ans);
@@ -211,9 +211,10 @@ function fmtDate(d) { if (!d) return ""; const [y, m, day] = d.split("-"); retur
 function renderAnswer(question, a) {
   showAnswerArea();
   const cites = a.citations || [];
+  const refused = Boolean(a.restricted_note) && cites.length === 0;
   let left = `<div class="q-bubble">${esc(question)}</div>
     <div class="answer-block"><div class="answer-by">${markSvg(24)} Shadow</div>
-    <div class="answer-md">${mdToHtml(a.answer_markdown, cites)}</div>`;
+    ${refused ? "" : `<div class="answer-md">${mdToHtml(a.answer_markdown, cites)}</div>`}`;
 
   if (a.decision_status)
     left += `<div class="decision-row"><span class="lbl">Decision</span>

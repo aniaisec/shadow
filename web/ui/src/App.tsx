@@ -82,6 +82,9 @@ export default function App() {
     try {
       const ans: Answer = await api.ask(actingAs.user_id, q);
       setQuestions((m) => ({ ...m, [q]: { text: q, answer: ans } }));
+    } catch {
+      setQuestions((m) => ({ ...m, [q]: { text: q, answer: null,
+        error: "Shadow couldn't finish this question. Please try again." } }));
     } finally {
       setLoading(false);
     }
@@ -156,6 +159,12 @@ export default function App() {
                 </div>
               ) : loading && !current?.answer ? (
                 <Thinking question={active} />
+              ) : current?.error ? (
+                <div className="answer-layout"><div className="conversation">
+                  <div className="q-bubble">{active}</div>
+                  <div role="alert">{current.error}</div>
+                  <button className="btn-secondary" onClick={() => ask(active)}>Retry</button>
+                </div></div>
               ) : current?.answer ? (
                 <AnswerView question={active} answer={current.answer}
                   followups={followupsFor(active)} onAsk={ask} />

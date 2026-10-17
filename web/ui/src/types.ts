@@ -70,4 +70,5 @@ export interface DecisionRow {
 export interface QItem {
   text: string;
   answer: Answer | null;
+  error?: string;
 }
