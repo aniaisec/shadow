@@ -1,0 +1,12 @@
+.venv/
+.env
+seed/ids.json
+web/activity_log.jsonl
+__pycache__/
+*.pyc
+web/ui/node_modules/
+web/static-react/
+seed/data/
+seed/live/
+*.log
+.DS_Store
